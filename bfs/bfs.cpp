@@ -50,7 +50,7 @@ void top_down_step(Graph g, vertex_set* frontier, vertex_set* new_frontier, int*
 }
 
 inline void parallel_top_down_step(Graph g, vertex_set *frontier, vertex_set *new_frontier, int *distances){
-    #pragma omp for schedule(static, 64)
+    #pragma omp parallel for schedule(static, 64)
     for (int i = 0; i < frontier->count; i++){
         int node = frontier->vertices[i];
 
@@ -129,14 +129,14 @@ void bfs_top_down(Graph graph, solution* sol) {
     vertex_set* new_frontier = &list2;
 
 
-    #pragma omp parallel
+    // #pragma omp parallel
     {
         // initialize all nodes to NOT_VISITED
-        #pragma omp for
+        // #pragma omp for
         for (int i=0; i<graph->num_nodes; i++)
             sol->distances[i] = NOT_VISITED_MARKER;
 
-        #pragma omp single
+        // #pragma omp single
         {
             // setup frontier with the root node
             frontier->vertices[frontier->count++] = ROOT_NODE_ID;
@@ -148,18 +148,18 @@ void bfs_top_down(Graph graph, solution* sol) {
 #ifdef VERBOSE
             double start_time = CycleTimer::currentSeconds();
 #endif
-            #pragma omp single
+            // #pragma omp single
             vertex_set_clear(new_frontier);
 
             parallel_top_down_step(graph, frontier, new_frontier, sol->distances);
 
 #ifdef VERBOSE
             double end_time = CycleTimer::currentSeconds();
-            #pragma omp single
+            // #pragma omp single
             printf("frontier=%-10d %.4f sec\n", frontier->count, end_time - start_time);
 #endif
 
-            #pragma omp single
+            // #pragma omp single
             {
                 // swap pointers
                 vertex_set *tmp = frontier;
@@ -288,8 +288,10 @@ void bfs_hybrid(Graph graph, solution* sol)
 
             // #pragma omp single
             vertex_set_clear(new_frontier);
-            parallel_top_down_step(graph, frontier, new_frontier, sol->distances);
-            parallel_bottom_up_step(graph, frontier, new_frontier, sol->distances, in_frontier);
+            if(new_frontier->count < graph->num_nodes * 0.33)
+                parallel_top_down_step(graph, frontier, new_frontier, sol->distances);
+            else
+                parallel_bottom_up_step(graph, frontier, new_frontier, sol->distances, in_frontier);
 
     #ifdef VERBOSE
                 double end_time = CycleTimer::currentSeconds();
