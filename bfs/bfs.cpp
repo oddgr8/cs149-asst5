@@ -50,6 +50,9 @@ void top_down_step(Graph g, vertex_set* frontier, vertex_set* new_frontier, int*
 }
 
 inline void parallel_top_down_step(Graph g, vertex_set *frontier, vertex_set *new_frontier, int *distances){
+    int num_threads = omp_get_num_threads();
+    int *nodes_to_add = (int *)malloc(sizeof(int) * g->num_nodes * num_threads);
+
     #pragma omp parallel for schedule(static, 64)
     for (int i = 0; i < frontier->count; i++){
         int node = frontier->vertices[i];
@@ -59,21 +62,21 @@ inline void parallel_top_down_step(Graph g, vertex_set *frontier, vertex_set *ne
                            ? g->num_edges
                            : g->outgoing_starts[node + 1];
 
-        int nodes_to_add[end_edge - start_edge];
+        int threadId = omp_get_thread_num();
         int count = 0;
 
         // attempt to add all neighbors to the new frontier
         for (int neighbor = start_edge; neighbor < end_edge; neighbor++){
             int outgoing = g->outgoing_edges[neighbor];
             if (distances[outgoing] == NOT_VISITED_MARKER && __sync_bool_compare_and_swap(&distances[outgoing], NOT_VISITED_MARKER, distances[node] + 1)){
-                nodes_to_add[count++] = outgoing;
+                nodes_to_add[threadId * g->num_nodes + count++] = outgoing;
             }
         }
 
         if (count > 0){
             int offset = __sync_fetch_and_add(&new_frontier->count, count);
             for (int i = 0; i < count; i++){
-                new_frontier->vertices[offset + i] = nodes_to_add[i];
+                new_frontier->vertices[offset + i] = nodes_to_add[threadId * g->num_nodes + i];
             }
         }
     }
